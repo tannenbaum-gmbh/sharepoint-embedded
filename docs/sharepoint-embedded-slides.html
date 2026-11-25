@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="From Microsoft Entra enterprise applications and service principals to Microsoft Graph, SharePoint Embedded permissions, and Azure billing.">
+  <title>Entra to SharePoint Embedded | An architecture primer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1423;
+      --panel: #152238;
+      --line: #344761;
+      --text: #f0f5ff;
+      --muted: #b9c9df;
+      --blue: #8dc5ff;
+      --green: #7de1c3;
+      --gold: #ffd08a;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 1.15rem/1.5 system-ui, sans-serif; }
+    a { color: var(--blue); text-underline-offset: .2em; }
+    a:hover { color: var(--green); }
+    button, select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: .5rem; padding: .45rem .75rem; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .45; cursor: default; }
+    :focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
+    .skip { position: fixed; top: -5rem; left: 1rem; z-index: 3; background: var(--panel); padding: .7rem; }
+    .skip:focus { top: 1rem; }
+    header { max-width: 1280px; margin: auto; padding: 1.3rem 2.5rem .5rem; display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; }
+    header span:last-child { color: var(--green); }
+    main { max-width: 1280px; margin: auto; }
+    .slide { padding: 2rem 2.5rem; min-height: 670px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 1.1rem; }
+    .slide[hidden] { display: none; }
+    .eyebrow { margin: 0; color: var(--green); font-size: .85rem; letter-spacing: .15em; text-transform: uppercase; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(2.8rem, 5.5vw, 5rem); line-height: 1.08; letter-spacing: -.045em; max-width: 950px; }
+    h2 { font-size: clamp(2rem, 3.5vw, 3.1rem); line-height: 1.15; letter-spacing: -.03em; }
+    h3 { font-size: 1.2rem; color: var(--blue); margin-bottom: .5rem; }
+    .lead { font-size: 1.35rem; color: var(--muted); max-width: 960px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card { padding: 1.3rem; background: var(--panel); border: 1px solid var(--line); border-radius: .8rem; }
+    .card p + p { margin-top: .7rem; }
+    .callout { padding: .9rem 1.2rem; border-left: 4px solid var(--green); background: #112c31; border-radius: 0 .5rem .5rem 0; }
+    .warning { border-color: var(--gold); background: #302819; }
+    .flow { display: flex; align-items: stretch; gap: .65rem; margin: .4rem 0; }
+    .flow .card { flex: 1; }
+    .arrow { align-self: center; color: var(--green); font-weight: bold; }
+    ul, ol { margin: .3rem 0; padding-left: 1.4rem; }
+    li + li { margin-top: .5rem; }
+    code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--green); overflow-wrap: anywhere; }
+    pre { margin: 0; padding: 1.1rem; background: #08101d; border: 1px solid var(--line); border-radius: .6rem; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .95rem; }
+    pre code { color: var(--text); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+    th { color: var(--blue); text-align: left; }
+    td, th { border-bottom: 1px solid var(--line); padding: .7rem; vertical-align: top; }
+    .sources { margin-top: auto; padding-top: 1rem; font-size: .8rem; color: var(--muted); }
+    .sources a { display: inline-block; margin: .15rem .8rem .15rem 0; }
+    .small { font-size: .95rem; color: var(--muted); }
+    .big-number { color: var(--green); font-size: 2.4rem; line-height: 1.2; font-weight: 700; }
+    nav { position: sticky; bottom: 0; padding: .8rem 1rem; border-top: 1px solid var(--line); background: var(--bg); display: flex; gap: .6rem; align-items: center; justify-content: center; flex-wrap: wrap; }
+    nav select { max-width: min(380px, 90vw); }
+    #counter { min-width: 4rem; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .help { text-align: center; font-size: .8rem; color: var(--muted); padding: .6rem 1rem; }
+    @media (min-width: 1000px) and (min-height: 800px) {
+      .presenting .slide { min-height: calc(100vh - 180px); }
+    }
+    @media (max-width: 700px) {
+      body { font-size: 1rem; }
+      header { padding: 1rem; letter-spacing: .05em; }
+      header span:last-child { display: none; }
+      .slide { padding: 1.5rem 1rem; min-height: auto; }
+      .grid, .three { grid-template-columns: 1fr; }
+      .flow { flex-direction: column; }
+      .arrow { transform: rotate(90deg); }
+      .lead { font-size: 1.1rem; }
+      nav { position: static; }
+    }
+    @media print {
+      :root { color-scheme: light; --bg: white; --panel: #f2f5f8; --line: #c4cdd6; --text: #101a27; --muted: #344761; --blue: #174d86; --green: #11624c; }
+      @page { size: A4 landscape; margin: 10mm; }
+      body { font-size: 10pt; }
+      header, nav, .help, .skip { display: none !important; }
+      main { max-width: none; }
+      .slide, .slide[hidden], .presenting .slide { display: flex !important; min-height: 0; padding: 0; gap: .6rem; border: 0; break-after: page; }
+      .slide:last-child { break-after: auto; }
+      h1 { font-size: 36pt; }
+      h2 { font-size: 25pt; }
+      h3, .lead { font-size: 13pt; }
+      .card { padding: .7rem; break-inside: avoid; }
+      .callout, .warning { background: #f2f5f8; }
+      pre { background: #f2f5f8; font-size: 9pt; padding: .7rem; }
+      pre code { color: var(--text); }
+      table { font-size: 10pt; }
+      td, th { padding: .4rem; }
+      .sources { font-size: 8pt; padding-top: .5rem; }
+      .small { font-size: 9pt; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .flow { flex-direction: row; }
+      .arrow { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#deck">Skip to slides</a>
+  <header><span>Architecture primer / Microsoft cloud</span><span>Identity + access + storage + billing</span></header>
+  <main id="deck">
+    <section class="slide" id="slide-1" aria-labelledby="title-1">
+      <p class="eyebrow">01 / The big picture</p>
+      <h1 id="title-1" tabindex="-1">From Entra to<br>SharePoint Embedded</h1>
+      <p class="lead">How an application's identity becomes permission to work with documents in a customer's tenant.</p>
+      <div class="flow" aria-label="Learning path: Entra identity, Graph API, Embedded storage, Azure billing">
+        <div class="card"><h3>Entra</h3><p>Who is calling?</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Microsoft Graph</h3><p>Which API operations?</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Embedded</h3><p>Which containers?</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Azure billing</h3><p>Who pays for usage?</p></div>
+      </div>
+      <p class="small">For developers, architects, and tenant admins. No identity background required. Original explanations and illustrative diagrams, grounded only in official Microsoft documentation. Reviewed 25 November 2026; follow the linked docs for current behavior.</p>
+      <p class="sources">Starting points:
+        <a href="https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/what-is-application-management">Entra application management</a>
+        <a href="https://learn.microsoft.com/en-us/graph/overview">Microsoft Graph overview</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/sharepoint-embedded-documentation#build-an-app">SharePoint Embedded: build an app</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-2" aria-labelledby="title-2">
+      <p class="eyebrow">02 / Identity vocabulary</p>
+      <h2 id="title-2" tabindex="-1">A principal is an identity, not a permission</h2>
+      <div class="grid three">
+        <div class="card"><h3>Tenant</h3><p>An organization's Microsoft Entra directory. It contains users, application identities, and access configuration.</p></div>
+        <div class="card"><h3>User principal</h3><p>The security identity representing a person who signs in.</p></div>
+        <div class="card"><h3>Service principal</h3><p>The security identity representing an application or workload in a particular tenant.</p></div>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>Authentication</h3><p>Prove <strong>who</strong> the caller is. Entra issues tokens after the appropriate authentication flow.</p></div>
+        <div class="card"><h3>Authorization</h3><p>Decide <strong>what</strong> that caller may do. The resource checks permissions and access policies.</p></div>
+      </div>
+      <p class="callout">A successful sign-in or token request does not mean the caller may read every document.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/entra/identity-platform/app-objects-and-service-principals">Application objects and service principals</a>
+        <a href="https://learn.microsoft.com/en-us/graph/auth/auth-concepts">Graph authentication and authorization</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-3" aria-labelledby="title-3">
+      <p class="eyebrow">03 / Two portal views</p>
+      <h2 id="title-3" tabindex="-1">App registration vs. enterprise application</h2>
+      <div class="grid">
+        <div class="card"><h3>App registrations: the blueprint</h3><p>Manage the <strong>application object</strong> in its home tenant.</p><ul><li>Application (client) ID and supported account types.</li><li>Redirect URIs and confidential-client credentials.</li><li>API permission requests and exposed scopes or app roles.</li></ul></div>
+        <div class="card"><h3>Enterprise applications: the local instance</h3><p>Manage <strong>service principals</strong> in this tenant.</p><ul><li>Granted consent and tenant-specific access.</li><li>User/group assignment and SSO configuration.</li><li>Sign-in activity and application lifecycle.</li></ul></div>
+      </div>
+      <p class="callout">For a registered application, these are related objects, not two copies of your code. Registration stores identity configuration; it does not upload or host the app.</p>
+      <p class="small">Managed identities are another service-principal type and do not have an associated application object. The blueprint analogy here describes application-type service principals.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/entra/identity-platform/app-objects-and-service-principals">Objects and portal views</a>
+        <a href="https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/what-is-application-management">Enterprise application management</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-4" aria-labelledby="title-4">
+      <p class="eyebrow">04 / Tenant-local trust</p>
+      <h2 id="title-4" tabindex="-1">One application, an identity in each tenant</h2>
+      <div class="flow">
+        <div class="card"><h3>Developer tenant</h3><p>Application object<br><code>client ID = A</code></p><p>Home service principal<br><code>object ID = H</code></p></div>
+        <span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Customer tenant B</h3><p>Local service principal<br><code>client ID = A</code><br><code>object ID = B</code></p><p>Tenant B's consent and policy.</p></div>
+        <span class="arrow" aria-hidden="true">+</span>
+        <div class="card"><h3>Customer tenant C</h3><p>Local service principal<br><code>client ID = A</code><br><code>object ID = C</code></p><p>Tenant C's consent and policy.</p></div>
+      </div>
+      <p>In a multitenant app, customer consent establishes the local application instance and its granted permissions. Consent in one customer tenant does not grant access in another.</p>
+      <p class="callout"><strong>Do not confuse IDs:</strong> the client ID identifies the app across tenants; an object ID identifies a specific directory object; the tenant ID identifies the directory.</p>
+      <p class="small">Illustrative IDs, not real identifiers. A single-tenant app is restricted to its home tenant; multitenant support must be configured and implemented deliberately.</p>
+      <p class="sources">Microsoft source:
+        <a href="https://learn.microsoft.com/en-us/entra/identity-platform/app-objects-and-service-principals">Application/service-principal relationships and multitenant example</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-5" aria-labelledby="title-5">
+      <p class="eyebrow">05 / Permission lifecycle</p>
+      <h2 id="title-5" tabindex="-1">Request, consent, and enforce are different steps</h2>
+      <div class="grid three">
+        <div class="card"><p class="big-number">1</p><h3>Developer requests</h3><p>Configure the API permissions the application needs. A permission request is not a grant.</p></div>
+        <div class="card"><p class="big-number">2</p><h3>Tenant consents</h3><p>A user or authorized administrator approves access, subject to the permission's consent requirements and tenant policy.</p></div>
+        <div class="card"><p class="big-number">3</p><h3>Resource enforces</h3><p>The API validates the access token and applies the resource's authorization rules on each call.</p></div>
+      </div>
+      <p class="callout">App assignment controls who can sign in to the app when assignment is required. It is not a substitute for Graph consent or SharePoint Embedded container membership.</p>
+      <p>Application management continues after consent: review permissions, manage credentials, monitor sign-ins, and remove obsolete access.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/what-is-application-management">Access, consent, assignment, and lifecycle</a>
+        <a href="https://learn.microsoft.com/en-us/graph/auth/auth-concepts">Graph permissions and enforcement</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-6" aria-labelledby="title-6">
+      <p class="eyebrow">06 / The API bridge</p>
+      <h2 id="title-6" tabindex="-1">Microsoft Graph is the API, not the identity provider</h2>
+      <p class="lead">One REST endpoint for many Microsoft cloud resources, including Entra and SharePoint. Use HTTP directly or an SDK.</p>
+      <div class="flow">
+        <div class="card"><h3>Your app</h3><p>Gets a token from the Microsoft identity platform.</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Microsoft Graph</h3><p>Receives the bearer token and authorizes the API request.</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Resource</h3><p>Users, groups, documents, or Embedded containers.</p></div>
+      </div>
+      <pre><code>GET https://graph.microsoft.com/v1.0/me
+Authorization: Bearer &lt;access-token-for-Microsoft-Graph&gt;</code></pre>
+      <p class="small">This profile example requires delegated access, such as <code>User.Read</code>. <code>/me</code> means the signed-in user and is not an app-only endpoint. The examples in this deck use the public-cloud <code>v1.0</code> API.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/graph/overview">Graph overview and endpoint</a>
+        <a href="https://learn.microsoft.com/en-us/graph/auth/auth-concepts">Bearer tokens and /me</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-7" aria-labelledby="title-7">
+      <p class="eyebrow">07 / Two access modes</p>
+      <h2 id="title-7" tabindex="-1">On behalf of a person, or as the application?</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Question</th><th>Delegated access</th><th>App-only access</th></tr></thead>
+        <tbody>
+          <tr><td>Who acts?</td><td>The app on behalf of a signed-in user.</td><td>The application itself; no signed-in user.</td></tr>
+          <tr><td>Graph permission type</td><td>Delegated permissions / scopes.</td><td>Application permissions / app roles.</td></tr>
+          <tr><td>Authorization</td><td>Both app and user must be allowed.</td><td>Granted app permissions and resource rules.</td></tr>
+          <tr><td>Typical workload</td><td>A user opens or edits a project document.</td><td>A background document-processing job.</td></tr>
+          <tr><td>Consent</td><td>Depends on scope and tenant policy.</td><td>Graph application permissions require admin consent.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="callout">App-only is not "a user with a secret." It is a separate workload identity, potentially with access broader than any individual user.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/graph/auth/auth-concepts">Delegated and app-only access</a>
+        <a href="https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow">Client credentials flow</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-8" aria-labelledby="title-8">
+      <p class="eyebrow">08 / A backend token flow</p>
+      <h2 id="title-8" tabindex="-1">Client credentials: an app proves its identity</h2>
+      <div class="flow">
+        <div class="card"><h3>Confidential backend</h3><p>Uses its client ID and a protected credential.</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Consuming tenant's Entra</h3><p>Issues an access token for Microsoft Graph.</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Microsoft Graph</h3><p>Checks the token and operation permissions.</p></div>
+      </div>
+      <pre><code>POST https://login.microsoftonline.com/{consuming-tenant-id}/oauth2/v2.0/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id={app-client-id}&amp;client_secret={protected-secret}
+&amp;scope=https://graph.microsoft.com/.default
+&amp;grant_type=client_credentials</code></pre>
+      <p class="small">Conceptual request, not an executable command: URL-encode form values. <code>.default</code> requests the statically configured permissions granted for Graph; it does not mean "all Graph permissions." Certificates or federated credentials avoid shared secrets.</p>
+      <p class="callout warning">Never put an app credential in browser HTML or JavaScript. An ID token identifies a sign-in; use an access token intended for Graph to call Graph.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow">Token request, .default, and credential protection</a>
+        <a href="https://learn.microsoft.com/en-us/graph/auth/auth-concepts">Graph access tokens</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-9" aria-labelledby="title-9">
+      <p class="eyebrow">09 / Storage behind your own UX</p>
+      <h2 id="title-9" tabindex="-1">What SharePoint Embedded adds</h2>
+      <p class="lead">An API-only file and document platform built on Microsoft 365. Your app supplies the experience; Microsoft 365 supplies document capabilities.</p>
+      <div class="grid three">
+        <div class="card"><h3>Your app</h3><p>Business workflows, UI, authentication integration, and Graph calls.</p></div>
+        <div class="card"><h3>Embedded platform</h3><p>Containers, files, folders, metadata, versions, and Office collaboration.</p></div>
+        <div class="card"><h3>Customer tenant</h3><p>Documents stay in its Microsoft 365 tenant boundary, with supported governance and compliance controls.</p></div>
+      </div>
+      <p class="callout">Owning the application does not move customer content into the developer's tenant. Container residency and application ownership are different concepts.</p>
+      <p class="small">Do not assume every advanced capability is included automatically: check the relevant licensing, configuration, and preview requirements before enabling features.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/sharepoint-embedded-documentation">Embedded overview and build paths</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/build-app-end-to-end">Files, Office, and production requirements</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/container-types-containers">Container residency</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-10" aria-labelledby="title-10">
+      <p class="eyebrow">10 / Embedded object model</p>
+      <h2 id="title-10" tabindex="-1">Owning app &rarr; container type &rarr; containers</h2>
+      <div class="flow">
+        <div class="card"><h3>Owning Entra app</h3><p>The application that creates and manages the storage family.</p><p><strong>One owning app : one type.</strong></p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Container type</h3><p>Defines app access, behavior, and billing accountability.</p><p>Created in the developer tenant.</p></div><span class="arrow" aria-hidden="true">&rarr;</span>
+        <div class="card"><h3>Many containers</h3><p>Files and folders within a storage/security boundary.</p><p>Created in consuming tenants.</p></div>
+      </div>
+      <p>Illustrative design: a project-management app owns a "Project documents" type; each project gets a container with its own members.</p>
+      <p class="callout"><strong>Three different IDs:</strong> app client ID = application; container type ID = storage family; container ID = storage instance and its Graph drive ID.</p>
+      <p class="small">A container type is a SharePoint Embedded resource, not an Entra application object. Its owning app must register it in every consuming tenant, including when developer and consumer are the same tenant.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/container-types-containers">Type, container, ownership, and registration</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/build-app-end-to-end">Container granularity and drive ID</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-11" aria-labelledby="title-11">
+      <p class="eyebrow">11 / The authorization stack</p>
+      <h2 id="title-11" tabindex="-1">Graph consent is necessary, but not sufficient</h2>
+      <div class="grid three">
+        <div class="card"><p class="big-number">1</p><h3>Graph permission</h3><p><code>FileStorageContainer.Selected</code></p><p>Allows the app to call Embedded container/content APIs in the chosen access mode.</p></div>
+        <div class="card"><p class="big-number">2</p><h3>Container-type grant</h3><p>Registration grants the app actions such as <code>read</code>, <code>readContent</code>, or <code>writeContent</code> for this type.</p><p>Separate delegated and application grant arrays.</p></div>
+        <div class="card"><p class="big-number">3</p><h3>User's container role</h3><p>For delegated access: <strong>Reader, Writer, Manager, or Owner</strong>.</p><p>The role limits what this user can do in this container.</p></div>
+      </div>
+      <p class="callout"><strong>Delegated:</strong> Graph authorization + intersection of app's type grants and user's container role.<br><strong>App-only:</strong> Graph authorization + app's type grants; no user-membership boundary.</p>
+      <p class="small">Delegated <code>FileStorageContainer.Selected</code> does not inherently require admin consent, though tenant policy can restrict user consent. Its application variant requires admin consent. Registration has its own admin-consent requirements.</p>
+      <p class="sources">Microsoft source:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/authentication-permissions">Permission layers, access modes, consent, and container roles</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-12" aria-labelledby="title-12">
+      <p class="eyebrow">12 / Setup is not runtime</p>
+      <h2 id="title-12" tabindex="-1">Use the right permission for each stage</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stage</th><th>Graph permission</th><th>Context</th></tr></thead>
+        <tbody>
+          <tr><td>Create/manage a type</td><td><code>FileStorageContainerType.Manage.All</code></td><td>Delegated, owning tenant. Current docs allow non-guest members to create a type and become its owner.</td></tr>
+          <tr><td>Register the type</td><td><code>FileStorageContainerTypeReg.Selected</code></td><td>Consuming tenant, owning app only, with admin consent. Delegated registration also requires an authorized admin user.</td></tr>
+          <tr><td>Use containers/files</td><td><code>FileStorageContainer.Selected</code></td><td>Consuming tenant, delegated or application permission, plus the relevant resource grants.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="callout">Only request what that stage needs. Do not distribute owning-tenant type-management permission requests to customer tenants.</p>
+      <p class="small">Type creation is not supported with app-only access. Container creation is different: it requires a <strong>confidential client</strong>, even with delegated access. A public SPA/mobile client must route creation through a protected backend.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/authentication-permissions">Setup permissions and confidential-client requirement</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/register-application-permissions">Registration identity and admin requirements</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-13" aria-labelledby="title-13">
+      <p class="eyebrow">13 / Customer onboarding</p>
+      <h2 id="title-13" tabindex="-1">Install the identity, then register the storage family</h2>
+      <ol>
+        <li>Establish the owning app's service principal in the consuming tenant and obtain the required admin consent.</li>
+        <li>As the owning app, acquire a Graph token in that tenant with registration permission.</li>
+        <li>Register the type and grant only the required delegated/app-only actions.</li>
+        <li>Validate returned grants; allow up to one hour for permission propagation. Complete applicable billing before use.</li>
+      </ol>
+      <pre><code>PUT https://graph.microsoft.com/v1.0/storage/fileStorage/containerTypeRegistrations/{containerTypeId}
+Authorization: Bearer &lt;owning-app-token-for-consuming-tenant&gt;
+Content-Type: application/json
+
+{"applicationPermissionGrants": [{
+  "appId": "{owning-app-client-id}",
+  "delegatedPermissions": ["none"],
+  "applicationPermissions": ["create", "read", "write", "readContent", "writeContent"]
+}]}</code></pre>
+      <p class="small">Illustrative app-only grants matching this repository's trial workload; not a universal production profile. <code>writeContent</code> requires <code>readContent</code>. Other applications can receive specific type grants too; a "guest app" is not a guest user.</p>
+      <p class="callout warning"><code>PUT</code> replaces the complete registration. Preserve existing apps/grants intentionally; a targeted <code>PATCH</code> uses the registration's current <code>etag</code>.</p>
+      <p class="sources">Microsoft source:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/register-application-permissions">Consent, registration payloads, replacement, and propagation</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-14" aria-labelledby="title-14">
+      <p class="eyebrow">14 / From setup to documents</p>
+      <h2 id="title-14" tabindex="-1">Use Embedded containers, then familiar DriveItems</h2>
+      <pre><code># Create a container from a confidential backend
+POST https://graph.microsoft.com/v1.0/storage/fileStorage/containers
+{"displayName": "Project Alpha", "containerTypeId": "{containerTypeId}"}
+
+# List files and folders in its root
+GET https://graph.microsoft.com/v1.0/drives/{containerId}/root/children
+
+# Upload or replace a small file
+PUT https://graph.microsoft.com/v1.0/drives/{containerId}/root:/brief.txt:/content
+&lt;file bytes&gt;</code></pre>
+      <p class="small">Abbreviated HTTP examples: supply a Graph bearer token and the appropriate content type. Each operation needs its matching type grant; delegated calls also need user access. The container ID is the drive ID; returned file IDs are DriveItem IDs.</p>
+      <div class="grid">
+        <div class="card"><h3>User-facing production app</h3><p>Prefer delegated access so actions reflect the user and are constrained by container roles.</p></div>
+        <div class="card"><h3>This repository's trial app</h3><p>A confidential, app-only backend with no user sign-in. Keep it private and use test data; UI users all act as the same application.</p></div>
+      </div>
+      <p class="sources">Microsoft sources (API concepts):
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/create-manage-containers">Container creation</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/manage-files">DriveItem file operations</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/authentication-permissions">Prefer delegated user operations</a>
+        <span>Repository-specific behavior: ../README.md</span>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-15" aria-labelledby="title-15">
+      <p class="eyebrow">15 / Billing is a separate layer</p>
+      <h2 id="title-15" tabindex="-1">Choose who pays before creating the type</h2>
+      <div class="grid three">
+        <div class="card"><h3>Trial</h3><p><code>trial</code></p><p>No Azure billing profile. Developer and consumer are the same tenant.</p><p>30 days; up to 5 containers including recycled containers; 1 GB per container.</p></div>
+        <div class="card"><h3>Standard billing</h3><p><code>standard</code></p><p>The <strong>developer/owning tenant</strong> pays for usage, including usage in customer tenants.</p><p>Often internal apps or an ISV that absorbs or recovers costs separately.</p></div>
+        <div class="card"><h3>Pass-through billing</h3><p><code>directToCustomer</code></p><p>Each <strong>consuming tenant</strong> pays for its usage through its Azure subscription.</p><p>Customer billing onboarding is required.</p></div>
+      </div>
+      <p class="callout warning">A type cannot change its billing model, and a trial cannot convert to production. Plan a new type and storage transition rather than treating this as a toggle.</p>
+      <p>Single-/multitenant app design and billing model are separate decisions. An ISV can use standard billing; multitenant does not automatically mean customer-paid.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/choose-billing-model">Billing models and permanence</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/container-types-containers">Classifications and trial limits</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-16" aria-labelledby="title-16">
+      <p class="eyebrow">16 / Developer-paid configuration</p>
+      <h2 id="title-16" tabindex="-1">Standard: attach billing in the owning tenant</h2>
+      <div class="grid">
+        <div class="card"><h3>Prerequisites</h3><ul><li>SharePoint tenant, Azure subscription, and resource group in the developer tenant.</li><li>Container type owner, or SharePoint Embedded Administrator / Global Administrator.</li><li>The configuring person also needs Azure subscription <strong>Owner or Contributor</strong> access.</li></ul></div>
+        <div class="card"><h3>Guided setup</h3><ol><li>Create the type with <code>standard</code> billing.</li><li>In the SharePoint Embedded VS Code extension, select the type and <strong>Attach billing</strong>.</li><li>Select the approved Azure subscription and resource group.</li><li>Validate billing, then register the type in each consuming tenant.</li></ol></div>
+      </div>
+      <pre><code># Alternative: authorized administrator, SharePoint Online Management Shell
+Add-SPOContainerTypeBilling -ContainerTypeId &lt;type-id&gt; `
+  -AzureSubscriptionId &lt;subscription-id&gt; -ResourceGroup &lt;group&gt; -Region &lt;region&gt;</code></pre>
+      <p class="callout">Entra admin authority and Azure subscription RBAC are separate. Admin consent does not confer billing-resource access.</p>
+      <p class="small">The command is a configuration illustration, not run by this deck; PowerShell tooling is not included in this repository's trial devcontainer.</p>
+      <p class="sources">Microsoft source:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/choose-billing-model">Standard billing roles, Attach billing, and PowerShell</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-17" aria-labelledby="title-17">
+      <p class="eyebrow">17 / Customer-paid configuration</p>
+      <h2 id="title-17" tabindex="-1">Pass-through: the customer activates billing</h2>
+      <p>Create a <code>directToCustomer</code> type and register it in the consuming tenant. Do not attach developer-tenant billing for this model.</p>
+      <div class="grid">
+        <div class="card"><h3>Customer prerequisites</h3><p><strong>Billing Administrator or Global Administrator</strong> in the consuming tenant, plus <strong>Owner or Contributor</strong> on its Azure subscription and an available resource group.</p><p>The SharePoint Embedded Administrator role alone is insufficient for this billing procedure.</p></div>
+        <div class="card"><h3>Microsoft 365 admin center path</h3><p><strong>Setup &rarr; Files and Content &rarr; Automate Content with Microsoft Syntex &rarr; Go to Syntex settings &rarr; Apps &rarr; SharePoint Embedded</strong></p><p>Turn on the service, choose subscription/resource group, review, and save.</p></div>
+      </div>
+      <p class="callout">Before initial use, valid customer billing is required. Verify the linked subscription, app status under SharePoint Embedded &gt; Apps, and pilot access.</p>
+      <p class="small">Portal labels can change; use the linked procedure. Turning off Embedded or disconnecting a previously linked subscription blocks new container creation; existing containers/content remain accessible. It is not a reliable "revoke all access" mechanism.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/admin/setup-billing-microsoft-365-admin-center">Pass-through prerequisites, portal steps, validation, and disconnection behavior</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/choose-billing-model">Developer vs. customer responsibilities</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-18" aria-labelledby="title-18">
+      <p class="eyebrow">18 / Cost drivers and operations</p>
+      <h2 id="title-18" tabindex="-1">Pay for consumption, not just visible files</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Generally available meter</th><th>What drives usage?</th><th>What to review?</th></tr></thead>
+        <tbody>
+          <tr><td>Storage</td><td>Documents, metadata, versions, recycle-bin content, and deleted containers.</td><td>Versions, growth, and retention before cleanup.</td></tr>
+          <tr><td>Archived storage</td><td>Archived containers held in a lower-cost cold tier; not free storage.</td><td>Lifecycle and access requirements.</td></tr>
+          <tr><td>API transactions</td><td>Explicit Graph calls made by the Embedded app.</td><td>Request volume and release-related changes.</td></tr>
+          <tr><td>Egress</td><td>Data leaving the platform for customer clients or servers, subject to exemptions.</td><td>Exports and repeated downloads.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small">Documented exemptions include internal eDiscovery/admin transactions and specified Office desktop/WAC transfers. A separate agent-message meter is in private preview; it is not part of the basic four-meter model. Check current pricing and feature terms rather than using fixed rates from this deck.</p>
+      <p class="callout">In the linked Azure subscription: <strong>Cost Management + Billing &rarr; Cost analysis</strong>. Group/filter by meter and available app/type/tenant dimensions; configure budgets and alerts for app and billing owners.</p>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/reference/billing-meters">Meters, exemptions, preview meter, and pricing resources</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/admin/monitor-usage-billing-cost">Cost analysis, budgets, and operational review</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-19" aria-labelledby="title-19">
+      <p class="eyebrow">19 / Put the layers together</p>
+      <h2 id="title-19" tabindex="-1">Example: can a project user edit a file?</h2>
+      <p class="lead">Illustrative delegated-access scenario: the app has <code>FileStorageContainer.Selected</code>, its type grants allow content writes, and customer billing is valid.</p>
+      <div class="grid">
+        <div class="card"><h3>User is a Reader</h3><p>The app can request a write, but the user's container role does not permit it.</p><p><strong>Result: the edit is not authorized.</strong></p></div>
+        <div class="card"><h3>User is a Writer</h3><p>The app's type grants and the user's role permit content edits, assuming the other resource policies allow the operation.</p><p><strong>Result: the edit can be authorized.</strong></p></div>
+      </div>
+      <p class="callout">If the same backend uses an app-only token, these user roles no longer constrain it. The app must not present app-only access as user-scoped authorization.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Failure</th><th>First checks</th></tr></thead>
+        <tbody>
+          <tr><td>401 / authentication</td><td>Token validity, target resource, tenant, and credential.</td></tr>
+          <tr><td>403 / authorization</td><td>Permission type, consent, type registration/grants, and delegated user role.</td></tr>
+          <tr><td>App inactive / cannot create containers</td><td>Billing model, linked subscription, activation, and trial limits.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="sources">Microsoft sources:
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/authentication-permissions">Effective permissions and roles</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/register-application-permissions">Authentication/authorization troubleshooting</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/admin/setup-billing-microsoft-365-admin-center">Billing access symptoms</a>
+      </p>
+    </section>
+
+    <section class="slide" id="slide-20" aria-labelledby="title-20">
+      <p class="eyebrow">20 / The implementation map</p>
+      <h2 id="title-20" tabindex="-1">Four questions to carry into the build</h2>
+      <div class="grid">
+        <div class="card"><h3>Who is calling?</h3><p>Register the app; distinguish its blueprint from the service principal in each tenant. Choose delegated or app-only authentication deliberately.</p></div>
+        <div class="card"><h3>What may it do?</h3><p>Request and consent the right Graph permissions. Register type grants; for delegated operations, assign the user's container role.</p></div>
+        <div class="card"><h3>Where are the documents?</h3><p>Create the type in the owning tenant and containers in consuming tenants. Work with content through Graph DriveItems.</p></div>
+        <div class="card"><h3>Who pays?</h3><p>Choose trial, developer-paid, or customer-paid at type creation. Attach/activate Azure billing and monitor the actual meters.</p></div>
+      </div>
+      <p class="callout">Build order: <strong>Entra app &rarr; container type &rarr; standard billing (if applicable) &rarr; customer consent + registration &rarr; pass-through billing (if applicable) &rarr; containers &rarr; files.</strong></p>
+      <p>Use the repository README for the private, app-only trial. Use Microsoft's end-to-end journey for production and customer onboarding.</p>
+      <p class="sources">Official reading path:
+        <a href="https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/what-is-application-management">1. Entra application management</a>
+        <a href="https://learn.microsoft.com/en-us/graph/overview">2. Graph overview</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/sharepoint-embedded-documentation#build-an-app">3. Embedded build index</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/build-app-end-to-end">4. End-to-end implementation</a>
+        <a href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/plan/choose-billing-model">5. Billing decision and setup</a>
+      </p>
+    </section>
+  </main>
+  <nav aria-label="Slide controls" hidden>
+    <button id="previous" type="button" aria-label="Previous slide">Previous</button>
+    <span id="counter" role="status" aria-live="polite" aria-atomic="true"></span>
+    <button id="next" type="button" aria-label="Next slide">Next</button>
+    <select id="jump" aria-label="Jump to slide"></select>
+    <button id="reading" type="button" aria-pressed="false">Reading view</button>
+    <button id="fullscreen" type="button">Fullscreen</button>
+    <button id="print" type="button">Print / PDF</button>
+  </nav>
+  <p class="help">Arrow keys / Page Up / Page Down: navigate. Home / End: first / last slide. Reading view shows all slides. Print includes the whole deck.</p>
+  <noscript><p class="help">JavaScript is off: all slides are available below one another, and printing still works.</p></noscript>
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const previous = document.querySelector('#previous');
+    const next = document.querySelector('#next');
+    const jump = document.querySelector('#jump');
+    const counter = document.querySelector('#counter');
+    const reading = document.querySelector('#reading');
+    const fullscreen = document.querySelector('#fullscreen');
+    let current = 0;
+    let readingView = false;
+
+    slides.forEach((slide, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = `${index + 1}. ${slide.querySelector('h1, h2').textContent}`;
+      jump.append(option);
+    });
+
+    function indexFromHash() {
+      const index = slides.findIndex(slide => `#${slide.id}` === location.hash);
+      return index < 0 ? 0 : index;
+    }
+
+    function render(focus = false) {
+      slides.forEach((slide, index) => { slide.hidden = !readingView && index !== current; });
+      document.body.classList.toggle('presenting', !readingView);
+      previous.disabled = current === 0;
+      next.disabled = current === slides.length - 1;
+      jump.value = String(current);
+      counter.textContent = `${current + 1} / ${slides.length}`;
+      reading.setAttribute('aria-pressed', String(readingView));
+      reading.textContent = readingView ? 'Slide view' : 'Reading view';
+      if (focus) {
+        slides[current].querySelector('h1, h2').focus({ preventScroll: true });
+        slides[current].scrollIntoView({ block: 'start' });
+      }
+    }
+
+    function goTo(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      if (location.hash !== `#${slides[current].id}`) {
+        history.pushState(null, '', `#${slides[current].id}`);
+      }
+      render(true);
+    }
+
+    previous.addEventListener('click', () => goTo(current - 1));
+    next.addEventListener('click', () => goTo(current + 1));
+    jump.addEventListener('change', () => goTo(Number(jump.value)));
+    reading.addEventListener('click', () => {
+      readingView = !readingView;
+      render();
+      slides[current].scrollIntoView({ block: 'start' });
+    });
+    document.querySelector('#print').addEventListener('click', () => window.print());
+    fullscreen.hidden = !document.fullscreenEnabled;
+    fullscreen.addEventListener('click', async () => {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+      } catch (error) {
+        counter.textContent = 'Fullscreen unavailable';
+        console.error('Could not change fullscreen mode:', error);
+      }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      fullscreen.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+    });
+    window.addEventListener('hashchange', () => { current = indexFromHash(); render(true); });
+    window.addEventListener('popstate', () => { current = indexFromHash(); render(true); });
+    document.addEventListener('keydown', event => {
+      if (readingView || event.altKey || event.ctrlKey || event.metaKey ||
+          event.target.closest('button, select, input, textarea, a, [contenteditable]')) return;
+      const destinations = {
+        ArrowRight: current + 1, ArrowDown: current + 1, PageDown: current + 1,
+        ArrowLeft: current - 1, ArrowUp: current - 1, PageUp: current - 1,
+        Home: 0, End: slides.length - 1
+      };
+      if (Object.hasOwn(destinations, event.key)) {
+        event.preventDefault();
+        goTo(destinations[event.key]);
+      }
+    });
+    current = indexFromHash();
+    document.querySelector('nav').hidden = false;
+    render();
+  </script>
+</body>
+</html>

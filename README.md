@@ -6,6 +6,21 @@ The app creates/lists containers and uploads/lists files in the selected contain
 It uses a confidential backend with **app-only** Microsoft Graph access; secrets and
 tokens never go to the browser.
 
+## Architecture slide deck
+
+Open [the HTML slide deck](docs/sharepoint-embedded-slides.html) directly in a
+browser (download/open the file when viewing this README on GitHub). It is
+self-contained and works offline without a server, credentials, or dependencies.
+The 20 slides build from Entra app registrations, enterprise applications, and
+service principals through Microsoft Graph to SharePoint Embedded permissions,
+tenant onboarding, and standard/pass-through Azure billing. Each slide links to
+official Microsoft documentation; those links require internet access.
+
+Use the navigation buttons, slide selector, arrow/Page Up/Page Down keys, or
+Home/End. **Reading view** shows every slide; **Print / PDF** prints the whole deck.
+With JavaScript disabled, all slides remain readable. Billing guidance is
+educational and does not configure billing or change the trial app.
+
 ## Development environment
 
 Open this repository in VS Code and choose **Dev Containers: Reopen in Container**

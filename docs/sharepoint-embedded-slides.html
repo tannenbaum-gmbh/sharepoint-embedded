@@ -61,6 +61,7 @@
     .small { font-size: .95rem; color: var(--muted); }
     .big-number { color: var(--green); font-size: 2.4rem; line-height: 1.2; font-weight: 700; }
     nav { position: sticky; bottom: 0; padding: .8rem 1rem; border-top: 1px solid var(--line); background: var(--bg); display: flex; gap: .6rem; align-items: center; justify-content: center; flex-wrap: wrap; }
+    nav[hidden] { display: none; }
     nav select { max-width: min(380px, 90vw); }
     #counter { min-width: 4rem; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
     .help { text-align: center; font-size: .8rem; color: var(--muted); padding: .6rem 1rem; }
@@ -517,6 +518,7 @@ Add-SPOContainerTypeBilling -ContainerTypeId &lt;type-id&gt; `
     });
 
     function indexFromHash() {
+      if (location.hash === '#deck') return current;
       const index = slides.findIndex(slide => `#${slide.id}` === location.hash);
       return index < 0 ? 0 : index;
     }

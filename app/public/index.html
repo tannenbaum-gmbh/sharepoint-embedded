@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SharePoint Embedded test app</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <h1>SharePoint Embedded test app</h1>
+    <p>Local app-only access. Use only a test tenant and keep this port private.</p>
+    <form id="create">
+      <label>New container name <input id="name" required maxlength="100"></label>
+      <button>Create container</button>
+    </form>
+    <h2>Containers</h2>
+    <button id="refresh" type="button">Refresh containers</button>
+    <label>Select a container <select id="containers"></select></label>
+    <h2>Root files and folders</h2>
+    <form id="upload">
+      <label>File (up to 1 MiB) <input id="file" type="file" required></label>
+      <button>Upload file</button>
+    </form>
+    <p>Uploading an existing filename replaces its content.</p>
+    <ul id="files"></ul>
+    <p id="status" role="status" aria-live="polite"></p>
+  </body>
+</html>

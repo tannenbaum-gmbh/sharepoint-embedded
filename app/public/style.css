@@ -1,0 +1,4 @@
+body { font: 1rem system-ui, sans-serif; max-width: 55rem; margin: 2rem auto; padding: 0 1rem; }
+form, label { display: block; margin: 1rem 0; }
+button, input, select { font: inherit; padding: .4rem; }
+#status { min-height: 2rem; overflow-wrap: anywhere; }

@@ -1,0 +1,25 @@
+{
+  "name": "SharePoint Embedded",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {}
+  },
+  "remoteUser": "node",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "SharePoint Embedded test app",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "SharepointEmbedded.ms-sharepoint-embedded-vscode-extension"
+      ]
+    }
+  },
+  "postCreateCommand": "node --version && npm --version && az version && curl --version && jq --version"
+}

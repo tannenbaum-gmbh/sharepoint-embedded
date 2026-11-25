@@ -141,6 +141,7 @@ For the same app-only identity, load your trusted local `.env` in Bash and acqui
 a token (do not enable shell tracing or echo the token):
 
 ```bash
+set -o pipefail
 set -a
 source .env
 set +a
@@ -167,7 +168,6 @@ jq -n --arg appId "$CLIENT_ID" \
     -X PUT "https://graph.microsoft.com/v1.0/storage/fileStorage/containerTypeRegistrations/$CONTAINER_TYPE_ID" \
     -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" -H "Content-Type: application/json" \
     --data-binary @- | jq .
-unset TOKEN CLIENT_SECRET
 ```
 
 **PUT replaces the whole registration**, including guest apps and delegated
@@ -175,6 +175,214 @@ grants. Use only for this dedicated test type; review existing grants before
 overwriting them. See [registration guidance](https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/register-application-permissions).
 Registration changes can take up to **one hour** to propagate; avoid repeated
 container creation while waiting.
+
+### Manage files and folders
+
+These [file management](https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/manage-files)
+examples use the app-only `TOKEN` above and the existing `readContent` /
+`writeContent` grants. Choose an existing **test** container from the list or UI;
+its `b!` container ID is also its drive ID. Run the examples in order in the same
+Bash session, stopping if any request fails.
+
+```bash
+CONTAINER_ID='b!REPLACE_WITH_TEST_CONTAINER_ID'
+
+# Create a folder; fail rather than silently rename an existing folder.
+FOLDER_ID=$(curl --fail-with-body --silent --show-error \
+  -X POST "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/root/children" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+  -H "Content-Type: application/json" \
+  --data-binary '{"name":"curl-samples","folder":{},"@microsoft.graph.conflictBehavior":"fail"}' \
+  | jq -er .id)
+
+# Upload a small text file and save its durable DriveItem ID.
+ITEM_ID=$(printf '%s\n' 'SharePoint Embedded curl sample' |
+  curl --fail-with-body --silent --show-error \
+    -X PUT "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$FOLDER_ID:/curl-sample.txt:/content" \
+    -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+    -H "Content-Type: text/plain" --data-binary @- | jq -er .id)
+
+# List the folder's children and read the uploaded file's metadata.
+curl --fail-with-body --silent --show-error \
+  "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$FOLDER_ID/children" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" | jq .
+curl --fail-with-body --silent --show-error --get \
+  "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$ITEM_ID" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+  --data-urlencode '$select=id,name,size,eTag,parentReference' | jq .
+```
+
+For an existing local file, replace the `printf` pipeline with
+`--data-binary @./your-file.txt` on the upload request. Simple Graph uploads allow
+up to **250 MB** (the web app's separate 1 MiB limit does not apply to curl).
+For larger files, use a
+[chunked upload session](https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0).
+Do not overwrite real content: uploading to an existing file path replaces it.
+
+Download via the short-lived, preauthenticated URL returned by Graph. Treat that
+URL as a secret: do not print or share it, and do not send the Graph bearer token
+to the download host. These commands print the sample file's text to the terminal;
+use `--output ./download.txt` instead for binary files.
+
+```bash
+DOWNLOAD_URL=$(curl --fail-with-body --silent --show-error \
+  "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$ITEM_ID" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+  | jq -er '."@microsoft.graph.downloadUrl"')
+curl --fail-with-body --silent --show-error --proto '=https' "$DOWNLOAD_URL"
+unset DOWNLOAD_URL
+
+# Replace content while retaining the item ID.
+printf '%s\n' 'Updated SharePoint Embedded curl sample' |
+  curl --fail-with-body --silent --show-error \
+    -X PUT "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$ITEM_ID/content" \
+    -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+    -H "Content-Type: text/plain" --data-binary @- | jq .
+
+# Rename and move the sample file from its folder to the container root.
+ROOT_ID=$(curl --fail-with-body --silent --show-error \
+  "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/root" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" | jq -er .id)
+jq -n --arg parentId "$ROOT_ID" \
+  '{name: "curl-sample-renamed.txt", parentReference: {id: $parentId}}' |
+  curl --fail-with-body --silent --show-error \
+    -X PATCH "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$ITEM_ID" \
+    -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+    -H "Content-Type: application/json" --data-binary @- | jq .
+
+# Inspect available versions.
+curl --fail-with-body --silent --show-error \
+  "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$ITEM_ID/versions" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" | jq .
+```
+
+**Delete only the sample file you just created.** Delete returns `204 No Content`,
+so do not pipe its response to `jq`. The restore example uses the original
+DriveItem ID as an alternate key, which is available in Graph **beta**; it is not
+the recycle-bin item's ID. Deleted content is retained for up to 93 days.
+
+```bash
+curl --fail-with-body --silent --show-error \
+  -X DELETE "https://graph.microsoft.com/v1.0/drives/$CONTAINER_ID/items/$ITEM_ID" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")"
+
+# Inspect deleted items, then restore the sample by its original DriveItem ID.
+curl --fail-with-body --silent --show-error \
+  "https://graph.microsoft.com/v1.0/storage/fileStorage/containers/$CONTAINER_ID/recycleBin/items" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" | jq .
+curl --fail-with-body --silent --show-error \
+  -X POST "https://graph.microsoft.com/beta/storage/fileStorage/containers/$CONTAINER_ID/recycleBin/items(driveItemId='$ITEM_ID')/restore" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+  -H "Content-Type: application/json" | jq .
+```
+
+### Search containers and files (delegated, preview)
+
+[SharePoint Embedded search](https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/search-containers-files)
+does **not** support the app-only `TOKEN`. Use a Microsoft Graph delegated token
+from your app's user sign-in flow with `Files.Read.All` and
+`FileStorageContainer.Selected`, appropriate consent, container-type delegated
+grants, and user access to the target content. The web app has no such sign-in
+flow; these samples require separate delegated authentication. Do not assume
+`az account get-access-token` has your app's delegated permissions.
+
+Read that token without echoing it or putting it in shell history. Both searches
+use `/beta` because `includeHiddenContent` is beta-only. Always include
+`ContainerTypeId` to restrict results to your app; search otherwise returns
+matching content the user can access even outside your app's container type.
+
+```bash
+read -rs -p 'Delegated Microsoft Graph token: ' DELEGATED_TOKEN
+printf '\n'
+
+# Search all containers of this application's type.
+jq -n --arg typeId "$CONTAINER_TYPE_ID" \
+  '{requests: [{
+    entityTypes: ["drive"],
+    query: {queryString: ("ContainerTypeId:" + $typeId)},
+    sharePointOneDriveOptions: {includeHiddenContent: true},
+    from: 0, size: 25
+  }]}' |
+  curl --fail-with-body --silent --show-error \
+    -X POST "https://graph.microsoft.com/beta/search/query" \
+    -H "$(printf 'Authorization: %s %s' Bearer "$DELEGATED_TOKEN")" \
+    -H "Content-Type: application/json" --data-binary @- | jq .
+
+# Search files/folders in the selected container by title.
+jq -n --arg typeId "$CONTAINER_TYPE_ID" --arg containerId "$CONTAINER_ID" \
+  '{requests: [{
+    entityTypes: ["driveItem"],
+    query: {queryString: ("Title:curl-sample AND ContainerId:" + $containerId +
+      " AND ContainerTypeId:" + $typeId)},
+    sharePointOneDriveOptions: {includeHiddenContent: true},
+    from: 0, size: 25
+  }]}' |
+  curl --fail-with-body --silent --show-error \
+    -X POST "https://graph.microsoft.com/beta/search/query" \
+    -H "$(printf 'Authorization: %s %s' Bearer "$DELEGATED_TOKEN")" \
+    -H "Content-Type: application/json" --data-binary @- | jq .
+unset DELEGATED_TOKEN
+```
+
+For full-text search across the type, replace the second query with
+`curl-sample AND ContainerTypeId:<your-type-id>`. New or changed content may not
+be indexed immediately. Page with `from` and `size`, checking
+`hitsContainers[].moreResultsAvailable` and `total` before requesting another page.
+
+### Archive and reactivate containers (preview)
+
+[Archival](https://learn.microsoft.com/en-us/sharepoint/dev/embedded/build/archive-restore-containers)
+requires Microsoft 365 Archive availability and billing configuration in the
+tenant. Do not assume the free trial supports it. A SharePoint Embedded
+administrator must first enable archival on the container type using admin
+PowerShell (not included in this devcontainer):
+
+```powershell
+Set-SPOContainerTypeConfiguration -ContainerTypeId <your-type-id> -IsArchiveEnabled $true
+```
+
+These calls can use the app-only `TOKEN` with application
+`FileStorageContainer.Selected` and container-type `write` permission. With
+delegated authentication, the caller must be an `Owner` / `PrincipalOwner` or an
+authorized administrator. **Archiving makes the entire container inaccessible**;
+use only the chosen test container, stop file operations first, and run each
+lifecycle command deliberately. Archive and unarchive return `204 No Content`.
+
+```bash
+curl --fail-with-body --silent --show-error \
+  -X POST "https://graph.microsoft.com/beta/storage/fileStorage/containers/$CONTAINER_ID/archive" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")"
+
+# Inspect archive state (archivalDetails is beta-only).
+curl --fail-with-body --silent --show-error --get \
+  "https://graph.microsoft.com/beta/storage/fileStorage/containers/$CONTAINER_ID" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+  --data-urlencode '$select=id,displayName,archivalDetails' | jq .
+
+# List archived containers belonging to this type.
+curl --fail-with-body --silent --show-error --get \
+  "https://graph.microsoft.com/beta/storage/fileStorage/containers" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")" \
+  --data-urlencode "\$filter=containerTypeId eq $CONTAINER_TYPE_ID and archivalDetails ne null" \
+  | jq .
+
+# Request reactivation; inspect archivalDetails again before accessing files.
+curl --fail-with-body --silent --show-error \
+  -X POST "https://graph.microsoft.com/beta/storage/fileStorage/containers/$CONTAINER_ID/unarchive" \
+  -H "$(printf 'Authorization: %s %s' Bearer "$TOKEN")"
+```
+
+Reactivation is instantaneous in the first seven days after archival; later it
+can take up to 24 hours. Keep reads and writes disabled until the service reports
+the container is active again. Archival is not deletion or recycle-bin restore.
+Graph beta APIs are preview-only and subject to change; these direct curl
+examples do not enable beta endpoints in the web app.
+
+When finished with all curl samples, clear credentials and temporary IDs:
+
+```bash
+unset TOKEN CLIENT_SECRET DELEGATED_TOKEN DOWNLOAD_URL CONTAINER_ID FOLDER_ID ITEM_ID ROOT_ID
+```
 
 ## Validation and troubleshooting
 

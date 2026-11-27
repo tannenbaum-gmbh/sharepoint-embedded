@@ -8,6 +8,9 @@ tokens never go to the browser.
 
 ## Architecture slide deck
 
+For a customer conversation, see the [architecture diagram and discussion
+guide](docs/sharepoint-embedded-customer-architecture.md).
+
 Open [the HTML slide deck](docs/sharepoint-embedded-slides.html) directly in a
 browser (download/open the file when viewing this README on GitHub). It is
 self-contained and works offline without a server, credentials, or dependencies.
